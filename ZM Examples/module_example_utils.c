@@ -64,6 +64,11 @@ void pollAndDisplay()
     } 
 }
 
+void poll(){
+	getMessage();
+}
+
+
 /** Initializes any sensors used in the application. 
 Which sensors used are determined by compile flags
 */

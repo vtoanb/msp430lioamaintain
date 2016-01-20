@@ -86,6 +86,10 @@ uint8_t module_state;
 #define RST_END_DAY		 0x24
 #define MACHINE_NAME_MSB 'K'     //machine name
 #define MACHINE_NAME_LSB '4'
+enum count_state{
+	TEMP_COUNT = 0,
+	NOM_COUNT
+};
 extern uint8_t zmBuf[162];
 /** The number of failed messages before initiating a network restart */
 uint8_t failCount = 0;
@@ -268,7 +272,26 @@ void state(){
 			break;
 		case MODULE_PARSE_MESSAGE:
 			// get message
-			pollAndDisplay();
+			poll();
+			// check if data is exist
+			if(zmBuf[0] > 0){
+				//clear buffer len
+				zmBuf[0] = 0;
+				//check for correct machine name
+				if(zmBuf[21] == MACHINE_NAME_MSB \
+				&& zmBuf[22] == MACHINE_NAME_LSB){
+					switch(zmBuf[20]){
+					case 'E': // update Error, correct it from server
+						break;
+					case 'R': // update Restart
+						break;
+					case 'C': // clear data
+						break;
+					default:
+						break;
+					}
+				}
+			}
 
 			// clear buffer counter
 			// update fail

@@ -56,6 +56,7 @@
 
 
 void pollAndDisplay();
+void poll();
 
 #define MAX_SENSORS 10
 
