@@ -1,0 +1,1 @@
+"./Source/example_hello_world.obj" "./Source/HAL/hal_launchpad.obj" "./Source/Common/printf.obj" "../lnk_msp430g2553.cmd" -l"libc.a" 

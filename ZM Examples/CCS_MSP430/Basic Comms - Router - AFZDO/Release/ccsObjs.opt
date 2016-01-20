@@ -1,0 +1,1 @@
+"./Source/example_basic_comms_router.obj" "./Source/ZM/af.obj" "./Source/ZM/application_configuration.obj" "./Source/ZM/module.obj" "./Source/ZM/module_errors.obj" "./Source/ZM/module_utilities.obj" "./Source/ZM/zdo.obj" "./Source/ZM/zm_phy_spi.obj" "./Source/HAL/hal_launchpad.obj" "./Source/Common/printf.obj" "./Source/Common/utilities.obj" "../lnk_msp430g2553.cmd" -l"libc.a" 
