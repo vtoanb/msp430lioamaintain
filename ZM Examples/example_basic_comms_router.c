@@ -281,11 +281,17 @@ void state(){
 				if(zmBuf[21] == MACHINE_NAME_MSB \
 				&& zmBuf[22] == MACHINE_NAME_LSB){
 					switch(zmBuf[20]){
-					case 'E': // update Error, correct it from server
+					case 'E': // update parameter from server
+						e_counter = zmBuf[25] << 8 + zmBuf[26];
+						p_counter = zmBuf[27] << 8 + zmBuf[28];
 						break;
 					case 'R': // update Restart
+						e_counter += zmBuf[25] << 8 + zmBuf[26];
+						p_counter += zmBuf[27] << 8 + zmBuf[28];
 						break;
 					case 'C': // clear data
+						e_counter = 0;
+						p_counter = 0;
 						break;
 					default:
 						break;
