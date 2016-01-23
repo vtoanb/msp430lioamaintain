@@ -57,9 +57,12 @@ extern void (*debugConsoleIsr)(char);
 
 /** handler for UART RX **/
 void handleUARTRX(char rxchar);
-
+void handleUARTRXref(char rxchar);
 /** handle for receving command **/
 uint8_t commandline[9] = {' ',' ',' ',' ',' ',' ',' ',' ',' '};
+uint8_t commandlinecpy[9];
+uint16_t zmMesAdd;
+uint8_t zmReady = 0;
 uint8_t commandlinecnt = 0;
 uint8_t parsing_state = 0;
 
@@ -75,7 +78,8 @@ int main( void )
     setLed(0);
     
 #define MODULE_START_DELAY_IF_FAIL_MS 5000
-    
+#define TEST_CLUSTER 0x77
+
     /* Use the default module configuration */
     struct moduleConfiguration defaultConfiguration = DEFAULT_MODULE_CONFIGURATION_COORDINATOR;
     
@@ -116,12 +120,26 @@ int main( void )
         {
             pollAndDisplay();
         }
-        
+
         /* Simple heartbeat indicator to show that the application is doing something*/
         heartBeatCounter++;
         if ((heartBeatCounter % HEARTBEAT_INTERVAL) == 0)
         {
             toggleLed(1);
+        }
+
+        if(zmReady == 1){
+        	zmReady = 0;
+        	printf("sending command ...\r\n");
+        	result = afSendData(DEFAULT_ENDPOINT,DEFAULT_ENDPOINT,\
+        			zmMesAdd, TEST_CLUSTER, commandlinecpy, 9);
+        	if(result == MODULE_SUCCESS){
+        		printf("send command success !\r\n");
+        	}
+        	else{
+        		printf("send command failed !\r\n");
+        	}
+
         }
     }
 }
@@ -131,9 +149,29 @@ int main( void )
 #define PARSE_SHORT_ADD 3
 #define PARSE_ENERGY 4
 #define PARSE_PRODUCT 5
-#define TEST_CLUSTER 0x77
+void handleUARTRX(char rxchar){
+	int i;
+	if(rxchar == '<'){
+		commandlinecnt = 1;
+	}
+	else{
+		if(commandlinecnt < 10 && commandlinecnt > 0){
+			commandline[commandlinecnt - 1] = rxchar;
+			commandlinecnt++;
+		}
+		if(commandlinecnt == 10){
+			//get address
+			zmMesAdd  = (uint16_t)(commandline[3] << 8) + commandline[4];
+			//copy recevie buffer
+			for (i=0;i<9;i++){
+				commandlinecpy[i] = commandline[i];
+			}
+			zmReady   = 1;
+		}
 
-void handleUARTRX(char rxchar)
+	}
+}
+void handleUARTRXref(char rxchar)
 {
 	uint16_t shortadd;
 	switch(parsing_state){
@@ -143,7 +181,7 @@ void handleUARTRX(char rxchar)
 		}
 		break;
 	case PARSE_CMD:
-		if(rxchar > '0' && rxchar < '9'){
+		if(rxchar > '0' && rxchar < '9' && rxchar != '<'){
 			commandline[0] = rxchar;
 			// because command just 1 byte, next state
 			parsing_state = PARSE_MACHINE_NAME;
@@ -156,7 +194,7 @@ void handleUARTRX(char rxchar)
 		}
 		break;
 	case PARSE_MACHINE_NAME:
-		if(
+		if((rxchar != '<') &&\
 		   ((rxchar >= '0' && rxchar <= '9') ||\
 		    (rxchar >= 'A' && rxchar <= 'Z'))&&\
 			(commandlinecnt == 1 || commandlinecnt == 2)){
@@ -172,7 +210,8 @@ void handleUARTRX(char rxchar)
 		}
 		break;
 	case PARSE_SHORT_ADD:
-		if(commandlinecnt == 3 || commandlinecnt == 4){
+		if((commandlinecnt == 3 || commandlinecnt == 4)&&\
+				(rxchar != '<')){
 			//PARSING ROUTER SHORT ADDRESS
 			commandline[commandlinecnt] = rxchar;
 			commandlinecnt++;
@@ -186,7 +225,7 @@ void handleUARTRX(char rxchar)
 		}
 		break;
 	case PARSE_ENERGY:
-		if(commandlinecnt == 5 || commandlinecnt == 6){
+		if((rxchar != '<') && (commandlinecnt == 5 || commandlinecnt == 6)){
 			commandline[commandlinecnt] = rxchar;
 			commandlinecnt++;
 			if(commandlinecnt == 7){
@@ -199,7 +238,7 @@ void handleUARTRX(char rxchar)
 		}
 		break;
 	case PARSE_PRODUCT:
-		if(commandlinecnt == 7 || commandlinecnt == 8){
+		if((rxchar != '<') && commandlinecnt == 7 || commandlinecnt == 8){
 			commandline[commandlinecnt] = rxchar;
 			commandlinecnt++;
 			if(commandlinecnt == 9){
@@ -208,6 +247,7 @@ void handleUARTRX(char rxchar)
 				/*parsing complete, do send this command*/
 				shortadd = commandline[3] << 8 + commandline[4];
 		        result = afSendData(DEFAULT_ENDPOINT,DEFAULT_ENDPOINT,shortadd, TEST_CLUSTER, commandline, 9);
+		        toggleLed(1);
 			}
 		}
 		else{
@@ -221,7 +261,7 @@ void handleUARTRX(char rxchar)
 		break;
 
 	}
-    printf("%c\r\n",rxchar);
+//    printf("%c\r\n",rxchar);
 }
 
 /* @} */

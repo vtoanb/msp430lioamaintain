@@ -270,7 +270,8 @@ void halUartInit()
     UCA0CTL1 = UCSWRST;                         // Stop USCIA0 state machine
     UCA0CTL0 = 0;
     UCA0CTL1 |= UCSSEL_2;                       // USCIA0 source from SMCLK
-    UCA0BR0 = 26; UCA0BR1 = 0;                  // 4mHz smclk w/modulation for 9,600bps, table 15-5 
+    //UCA0BR0 = 26; UCA0BR1 = 0;                  // 4mHz smclk w/modulation for 9,600bps, table 15-5
+    UCA0BR0 = 13; UCA0BR1 = 0;
     UCA0MCTL = UCBRS_0 +UCBRF_1 + UCOS16;       // Modulation UCBRSx=1, over sampling      
     UCA0CTL1 &= ~UCSWRST;                       // **Initialize USCI state machine**
     IE2 |= UCA0RXIE;                            // Enable USCI_A0 RX interrupt

@@ -62,6 +62,7 @@
 #include "../ZM/af.h"
 #include "../ZM/zdo.h"
 #include "module_example_utils.h"
+#include "../ZM/zm_phy_spi.h"
 
 /** function pointer (in hal file) for the function that gets called when a button is pressed*/
 extern void (*buttonIsr)(int8_t);
@@ -72,6 +73,7 @@ moduleResult_t result;
 /** Handles button interrupt */
 void handleButtonPress(int8_t whichButton);
 void state();
+int sendCommand();
 // DEBUG
 //#define RESTART_AFTER_ZM_FAILURE
 
@@ -79,8 +81,9 @@ uint8_t counter = 0;
 uint16_t p_counter = 0;
 uint16_t e_counter = 0;
 uint8_t testMessage[] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-uint8_t module_state;
+uint8_t module_state = 0x01; // module_start
 #define CMD_UPDATE_START 0x1A //ask server for current params
+#define CMD_UPDATE_COUNTER 'U'
 #define CMD_SEND_INFO 	 0x1B    //send current params to server
 #define CMD_FIX_ERROR 	 0x23        //receive error param from server, fix local
 #define RST_END_DAY		 0x24
@@ -90,7 +93,7 @@ enum count_state{
 	TEMP_COUNT = 0,
 	NOM_COUNT
 };
-extern uint8_t zmBuf[162];
+extern uint8_t zmBuf[ZIGBEE_MODULE_BUFFER_SIZE];
 /** The number of failed messages before initiating a network restart */
 uint8_t failCount = 0;
 #define MAX_FAILED_MESSAGES_BEFORE_RESTART  2
@@ -102,100 +105,102 @@ int main( void )
     printf("\r\n****************************************************\r\n");
     printf("Basic Communications Example - ROUTER - using AFZDO\r\n");
     buttonIsr = &handleButtonPress;
-    
-#define MODULE_START_DELAY_IF_FAIL_MS 5000
-    
-    /* Use the default module configuration */
-    struct moduleConfiguration defaultConfiguration = DEFAULT_MODULE_CONFIGURATION_ROUTER;
-    /* Change this if you are using a custom PAN */
-    defaultConfiguration.panId = ANY_PAN;
-    
-    /* Turn Off nwk status LED if on */
-    clearLed(ON_NETWORK_LED);
-    /* Loop until module starts */
 
-#ifdef RESTART_AFTER_ZM_FAILURE
-start:
-#endif
-    /* Try Auto-Start first. This will NOT clear out the module's previous network state; the module 
-    will just pick up where it left off. This is a good demonstration of a fast join. */
-    defaultConfiguration.startupOptions = 0; 
-    /* Start the module, first using auto-start, and then if it fails or a button is pressed then
-    do a standard startup instead, clearing out all previous network information.
-    If message sending fails (e.g. Error 0xCD in method 0x2300) then we increment a failCount.
-    Once we've had a few failures then we know that we need to do a full start. 
-    To do this, we switch to our default startup options, which clear everything out. */
-    if (((expressStartModule(&defaultConfiguration, GENERIC_APPLICATION_CONFIGURATION, MODULE_REGION_NORTH_AMERICA)) != MODULE_SUCCESS) 
-        || (failCount >= MAX_FAILED_MESSAGES_BEFORE_RESTART) || (buttonIsPressed(ANY_BUTTON)))
-    {
-        /* Note: If using auto-start (eg startupOptions = 0) then expressStartModule will not return an 
-        error if no network is present, and this loop will never take more than one time. 
-        This can happen when the module was previously programmed to be one device type (e.g. coordinator)
-        but running this code you want it to be a different one (e.g. router). Auto-start mode will not
-        return an error if there's no network; this is discovered when the router goes to send a message
-        and it fails. In this case then skip auto-start and do a full restart, clearing out old information. */         
-        
-        printf("Switching to Default\r\n");
-        defaultConfiguration.startupOptions = DEFAULT_STARTUP_OPTIONS;   
-        while ((result = startModule(&defaultConfiguration, GENERIC_APPLICATION_CONFIGURATION)) != MODULE_SUCCESS)
-        {
-            /* Module startup failed; display error and blink LED */
-            setLed(NETWORK_FAILURE_LED);                    
-            printf("Module start unsuccessful. Error Code 0x%02X. Retrying...\r\n", result);
-            delayMs(MODULE_START_DELAY_IF_FAIL_MS/2);                    
-            clearLed(NETWORK_FAILURE_LED);
-            delayMs(MODULE_START_DELAY_IF_FAIL_MS/2);
-        }
-    }
-    printf("On Network!\r\n");
-    /* Indicate we got on the network */
-    setLed(ON_NETWORK_LED); 
+//#define MODULE_START_DELAY_IF_FAIL_MS 5000
+//
+//    /* Use the default module configuration */
+//    struct moduleConfiguration defaultConfiguration = DEFAULT_MODULE_CONFIGURATION_ROUTER;
+//    /* Change this if you are using a custom PAN */
+//    defaultConfiguration.panId = ANY_PAN;
+//
+//    /* Turn Off nwk status LED if on */
+//    clearLed(ON_NETWORK_LED);
+//    /* Loop until module starts */
+//
+//#ifdef RESTART_AFTER_ZM_FAILURE
+//start:
+//#endif
+//    /* Try Auto-Start first. This will NOT clear out the module's previous network state; the module
+//    will just pick up where it left off. This is a good demonstration of a fast join. */
+//    defaultConfiguration.startupOptions = 0;
+//    /* Start the module, first using auto-start, and then if it fails or a button is pressed then
+//    do a standard startup instead, clearing out all previous network information.
+//    If message sending fails (e.g. Error 0xCD in method 0x2300) then we increment a failCount.
+//    Once we've had a few failures then we know that we need to do a full start.
+//    To do this, we switch to our default startup options, which clear everything out. */
+//    if (((expressStartModule(&defaultConfiguration, GENERIC_APPLICATION_CONFIGURATION, MODULE_REGION_NORTH_AMERICA)) != MODULE_SUCCESS)
+//        || (failCount >= MAX_FAILED_MESSAGES_BEFORE_RESTART) || (buttonIsPressed(ANY_BUTTON)))
+//    {
+//        /* Note: If using auto-start (eg startupOptions = 0) then expressStartModule will not return an
+//        error if no network is present, and this loop will never take more than one time.
+//        This can happen when the module was previously programmed to be one device type (e.g. coordinator)
+//        but running this code you want it to be a different one (e.g. router). Auto-start mode will not
+//        return an error if there's no network; this is discovered when the router goes to send a message
+//        and it fails. In this case then skip auto-start and do a full restart, clearing out old information. */
+//
+//        printf("Switching to Default\r\n");
+//        defaultConfiguration.startupOptions = DEFAULT_STARTUP_OPTIONS;
+//        while ((result = startModule(&defaultConfiguration, GENERIC_APPLICATION_CONFIGURATION)) != MODULE_SUCCESS)
+//        {
+//            /* Module startup failed; display error and blink LED */
+//            setLed(NETWORK_FAILURE_LED);
+//            printf("Module start unsuccessful. Error Code 0x%02X. Retrying...\r\n", result);
+//            delayMs(MODULE_START_DELAY_IF_FAIL_MS/2);
+//            clearLed(NETWORK_FAILURE_LED);
+//            delayMs(MODULE_START_DELAY_IF_FAIL_MS/2);
+//        }
+//    }
+//    printf("On Network!\r\n");
+//    /* Indicate we got on the network */
+//    setLed(ON_NETWORK_LED);
+//
+//    /* On network, display info about this network */
+//#ifdef DISPLAY_NETWORK_INFORMATION
+//    displayNetworkConfigurationParameters();
+//    displayDeviceInformation();
+//#else
+//    displayBasicDeviceInformation();
+//#endif
+//
+//    /* Now the network is running - send a message to the coordinator every few seconds.*/
+//
+//    HAL_ENABLE_INTERRUPTS();
+//
+//#define TEST_CLUSTER 0x77
+//
+//
+//
+//    while (1)
+//    {
+//        /* Indicate that we are sending a message */
+//        setLed(SEND_MESSAGE_LED);
+//        printf("Sending Message %u  ", counter++);
+//        /* Attempt to send the message.
+//        Note: if you would like to send the message with APS Acknowledgments then change
+//        AF_MAC_ACK to AF_APS_ACK below. This can be done on a per-message basis. */
+//        afSetAckMode(AF_MAC_ACK);
+//        result = afSendData(DEFAULT_ENDPOINT,DEFAULT_ENDPOINT,0, TEST_CLUSTER, testMessage, 5);
+//        clearLed(SEND_MESSAGE_LED);
+//        if (result == MODULE_SUCCESS)
+//        {
+//            printf("Success\r\n");
+//            failCount = 0;
+//        } else {
+//            printf("ERROR %02X ", result);
+//#ifdef RESTART_AFTER_ZM_FAILURE
+//            printf("\r\nRestarting\r\n");
+//            // Note: may need to do a full start. If we do an auto-start we could end up in an endless loop here.
+//            failCount++;
+//            goto start;
+//#else
+//            printf("stopping\r\n");
+//            while(1);
+//#endif
+//        }
+//        delayMs(2000);
+//    }
     
-    /* On network, display info about this network */
-#ifdef DISPLAY_NETWORK_INFORMATION     
-    displayNetworkConfigurationParameters();                
-    displayDeviceInformation();
-#else
-    displayBasicDeviceInformation();
-#endif
-    
-    /* Now the network is running - send a message to the coordinator every few seconds.*/
-    
-    HAL_ENABLE_INTERRUPTS();
-    
-#define TEST_CLUSTER 0x77
-    
-
-
-    while (1)
-    {
-        /* Indicate that we are sending a message */
-        setLed(SEND_MESSAGE_LED);
-        printf("Sending Message %u  ", counter++);
-        /* Attempt to send the message.
-        Note: if you would like to send the message with APS Acknowledgments then change
-        AF_MAC_ACK to AF_APS_ACK below. This can be done on a per-message basis. */
-        afSetAckMode(AF_MAC_ACK);        
-        result = afSendData(DEFAULT_ENDPOINT,DEFAULT_ENDPOINT,0, TEST_CLUSTER, testMessage, 5);
-        clearLed(SEND_MESSAGE_LED);
-        if (result == MODULE_SUCCESS)
-        {
-            printf("Success\r\n");
-            failCount = 0;
-        } else {
-            printf("ERROR %02X ", result);
-#ifdef RESTART_AFTER_ZM_FAILURE
-            printf("\r\nRestarting\r\n");
-            // Note: may need to do a full start. If we do an auto-start we could end up in an endless loop here.
-            failCount++;
-            goto start;
-#else        
-            printf("stopping\r\n");
-            while(1);
-#endif
-        }
-        delayMs(2000);
-    }
+    state();
 }
 
 /** When a button is pressed, display device information */
@@ -207,6 +212,14 @@ void handleButtonPress(int8_t whichButton)
 #else
     displayBasicDeviceInformation();
 #endif
+    // update p_counter
+    e_counter++;
+    p_counter += 2;
+    testMessage[4] =  e_counter & 0xFF;
+    testMessage[3] = (e_counter >> 8) & 0xFF;
+    testMessage[6] =  p_counter & 0xFF;
+    testMessage[5] = (p_counter >> 8) & 0xFF;
+
 }
 /** state machine of router module **/
 #define MODULE_START 0x01
@@ -214,6 +227,9 @@ void handleButtonPress(int8_t whichButton)
 #define MODULE_PARSE_MESSAGE 0x03
 #define MODULE_RESTART_FAIL 0x04
 #define MODULE_IDLE 0x05
+
+#define TEST_CLUSTER 0x77
+
 void state(){
 	while(1){
 		/* Use the default module configuration */
@@ -222,115 +238,152 @@ void state(){
 		/* Change this if you are using a custom PAN */
 		defaultConfiguration.panId = ANY_PAN;
 
-		module_state = MODULE_START;
 
 		switch(module_state){
 		case MODULE_START:
-			//start module code
-		    defaultConfiguration.startupOptions = 0;
 
-		    if (((expressStartModule(&defaultConfiguration, GENERIC_APPLICATION_CONFIGURATION, MODULE_REGION_NORTH_AMERICA)) != MODULE_SUCCESS)
-		        || (failCount >= MAX_FAILED_MESSAGES_BEFORE_RESTART) || (buttonIsPressed(ANY_BUTTON)))
-		    {
-		        defaultConfiguration.startupOptions = DEFAULT_STARTUP_OPTIONS;
-		        while ((result = startModule(&defaultConfiguration, GENERIC_APPLICATION_CONFIGURATION)) != MODULE_SUCCESS)
-		        {
-		            /* Module startup failed*/
-		            delayMs(MODULE_START_DELAY_IF_FAIL_MS);
-		        }
-		    }
+			/* Try Auto-Start first. This will NOT clear out the module's previous network state; the module
+			will just pick up where it left off. This is a good demonstration of a fast join. */
+			defaultConfiguration.startupOptions = 0;
+			/* Start the module, first using auto-start, and then if it fails or a button is pressed then
+			do a standard startup instead, clearing out all previous network information.
+			If message sending fails (e.g. Error 0xCD in method 0x2300) then we increment a failCount.
+			Once we've had a few failures then we know that we need to do a full start.
+			To do this, we switch to our default startup options, which clear everything out. */
+			if (((expressStartModule(&defaultConfiguration, GENERIC_APPLICATION_CONFIGURATION, MODULE_REGION_NORTH_AMERICA)) != MODULE_SUCCESS)
+				|| (failCount >= MAX_FAILED_MESSAGES_BEFORE_RESTART) || (buttonIsPressed(ANY_BUTTON)))
+			{
+				/* Note: If using auto-start (eg startupOptions = 0) then expressStartModule will not return an
+				error if no network is present, and this loop will never take more than one time.
+				This can happen when the module was previously programmed to be one device type (e.g. coordinator)
+				but running this code you want it to be a different one (e.g. router). Auto-start mode will not
+				return an error if there's no network; this is discovered when the router goes to send a message
+				and it fails. In this case then skip auto-start and do a full restart, clearing out old information. */
 
-		    HAL_ENABLE_INTERRUPTS();
+				printf("Switching to Default\r\n");
+				defaultConfiguration.startupOptions = DEFAULT_STARTUP_OPTIONS;
+				while ((result = startModule(&defaultConfiguration, GENERIC_APPLICATION_CONFIGURATION)) != MODULE_SUCCESS)
+				{
+					/* Module startup failed; display error and blink LED */
+					setLed(NETWORK_FAILURE_LED);
+					printf("Module start unsuccessful. Error Code 0x%02X. Retrying...\r\n", result);
+					delayMs(5000/2);
+					clearLed(NETWORK_FAILURE_LED);
+					delayMs(5000/2);
+				}
+			}
+			printf("On Network!\r\n");
+			/* Indicate we got on the network */
+			setLed(ON_NETWORK_LED);
+
+			/* On network, display info about this network */
+			displayBasicDeviceInformation();
+
+			/* Now the network is running - send a message to the coordinator every few seconds.*/
+
+			HAL_ENABLE_INTERRUPTS();
+
+
 
 			// update message
 		    // Startup code, ask server for current params
-		    testMessage[0] = MACHINE_NAME_MSB;
-		    testMessage[1] = MACHINE_NAME_LSB;
-		    testMessage[2] = CMD_UPDATE_START;
+			testMessage[0] = CMD_UPDATE_COUNTER;
+		    testMessage[1] = MACHINE_NAME_MSB;
+		    testMessage[2] = MACHINE_NAME_LSB;
+
 			// send update restart message
 
-		    afSetAckMode(AF_MAC_ACK);
-		    result = afSendData(DEFAULT_ENDPOINT,DEFAULT_ENDPOINT,0, TEST_CLUSTER, testMessage, 7);
-			// change to update state
-		    if(result == MODULE_SUCCESS){
-		    	module_state = MODULE_START;
-		    }
-		    else{
-		    	module_state = MODULE_PARSE_MESSAGE;
-		    }
-			break;
-		case MODULE_SEND_COUNTER:
-			testMessage[2] = CMD_SEND_INFO;
-			result = afSendData(DEFAULT_ENDPOINT,DEFAULT_ENDPOINT,0, TEST_CLUSTER, testMessage, 7);
-			if(result == MODULE_SUCCESS){
-				module_state = MODULE_IDLE;
-			}
-			else{
-				module_state = MODULE_RESTART_FAIL;
-			}
-			//send info message
+	        if(sendCommand()){
+	        	module_state = MODULE_IDLE;
+	        }
+	        else{
+	        	module_state = MODULE_START;
+	        }
 			break;
 		case MODULE_PARSE_MESSAGE:
 			// get message
-			poll();
-			// check if data is exist
-			if(zmBuf[0] > 0){
-				//clear buffer len
-				zmBuf[0] = 0;
-				//check for correct machine name
-				if(zmBuf[21] == MACHINE_NAME_MSB \
-				&& zmBuf[22] == MACHINE_NAME_LSB){
-					switch(zmBuf[20]){
-					case 'E': // update parameter from server
-						e_counter = zmBuf[25] << 8 + zmBuf[26];
-						p_counter = zmBuf[27] << 8 + zmBuf[28];
-						break;
-					case 'R': // update Restart
-						e_counter += zmBuf[25] << 8 + zmBuf[26];
-						p_counter += zmBuf[27] << 8 + zmBuf[28];
-						break;
-					case 'C': // clear data
-						e_counter = 0;
-						p_counter = 0;
-						break;
-					default:
-						break;
+			if(moduleHasMessageWaiting()){
+
+				getMessage();
+				// check if data is exist
+				printf("new message received, len = %d !",zmBuf[0]);
+				if(zmBuf[0] > 20){
+					printf("machine name: %c%c",zmBuf[21],zmBuf[22]);
+
+					//check for correct machine name
+					if(zmBuf[21] == MACHINE_NAME_MSB \
+					&& zmBuf[22] == MACHINE_NAME_LSB){
+						switch(zmBuf[20]){
+						case 'E': // update parameter from server
+							e_counter = (uint16_t)(zmBuf[25] << 8) + zmBuf[26];
+							p_counter = (uint16_t)(zmBuf[27] << 8) + zmBuf[28];
+							printf("e_counter = %d, p_counter = %d",e_counter,p_counter);
+							break;
+						case 'R': // update Restart
+							e_counter += (uint16_t)(zmBuf[25] << 8) + zmBuf[26];
+							p_counter += (uint16_t)(zmBuf[27] << 8) + zmBuf[28];
+							printf("e_counter = %d, p_counter = %d",e_counter,p_counter);
+							break;
+						case 'C': // clear data
+							e_counter = 0;
+							p_counter = 0;
+							break;
+						case 'X':
+							// Turn OFF IO to disable machine
+							// REPORT TO MASTER
+							break;
+						default:
+							break;
+						}
 					}
 				}
+				//clear buffer len
+				zmBuf[0] = 0;
 			}
-
-			// clear buffer counter
-			// update fail
-			// update restart
-			// change to send
+			// change to MODULE_SEND_COUNTER:
 			module_state = MODULE_SEND_COUNTER;
 			break;
+		case MODULE_SEND_COUNTER:
+			testMessage[0] = CMD_UPDATE_COUNTER;
+			if(sendCommand()){
+				module_state = MODULE_IDLE;
+			}
+			else{
+				module_state = MODULE_START;
+			}
+			break;
 		case MODULE_IDLE:
-			delayMs(30000);
+			delayMs(5000);
 			module_state = MODULE_PARSE_MESSAGE;
 			// waiting, prevent too much message for coordinator
 			break;
 		case MODULE_RESTART_FAIL:
-		    defaultConfiguration.startupOptions = 0;
-
-		    if (((expressStartModule(&defaultConfiguration, GENERIC_APPLICATION_CONFIGURATION, MODULE_REGION_NORTH_AMERICA)) != MODULE_SUCCESS)
-		        || (failCount >= MAX_FAILED_MESSAGES_BEFORE_RESTART) || (buttonIsPressed(ANY_BUTTON)))
-		    {
-		        defaultConfiguration.startupOptions = DEFAULT_STARTUP_OPTIONS;
-		        while ((result = startModule(&defaultConfiguration, GENERIC_APPLICATION_CONFIGURATION)) != MODULE_SUCCESS)
-		        {
-		            /* Module startup failed*/
-		            delayMs(MODULE_START_DELAY_IF_FAIL_MS);
-		        }
-		    }
-
-		    HAL_ENABLE_INTERRUPTS();
-
 			break;
 		default:
 			break;
 		}
 	}
+}
+
+int sendCommand(){
+    /* Attempt to send the message.
+    Note: if you would like to send the message with APS Acknowledgments then change
+    AF_MAC_ACK to AF_APS_ACK below. This can be done on a per-message basis. */
+    afSetAckMode(AF_MAC_ACK);
+    result = afSendData(DEFAULT_ENDPOINT,DEFAULT_ENDPOINT,0, TEST_CLUSTER, testMessage, 7);
+    clearLed(SEND_MESSAGE_LED);
+    if (result == MODULE_SUCCESS)
+    {
+        printf("Success\r\n");
+        failCount = 0;
+        return 1;
+    } else {
+        printf("ERROR %02X ", result);
+        printf("\r\nRestarting\r\n");
+        // Note: may need to do a full start. If we do an auto-start we could end up in an endless loop here.
+        failCount++;
+        return 0;
+    }
 }
 
 /* @} */
